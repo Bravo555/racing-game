@@ -2,14 +2,14 @@ use piston_window::*;
 use std::collections::HashMap;
 
 struct Player {
-    pos: (f64, f64),
+    pos: [f64; 2],
     size: f64,
     velocity: (f64, f64),
     grounded: bool,
 }
 
 impl Player {
-    fn from_pos(pos: (f64, f64), size: f64) -> Player {
+    fn from_pos(pos: [f64; 2], size: f64) -> Player {
         Player {
             pos,
             size,
@@ -20,7 +20,7 @@ impl Player {
 
     fn jump(&mut self) {
         if self.grounded {
-            self.velocity.1 -= 10.0;
+            self.velocity.1 -= 50.0;
             self.grounded = false;
         }
     }
@@ -30,18 +30,18 @@ impl Player {
             self.jump();
         }
         if let Some(ButtonState::Press) = input_state.get(&Key::Right) {
-            self.velocity.0 += 0.1;
+            self.velocity.0 += 0.5;
         }
         if let Some(ButtonState::Press) = input_state.get(&Key::Left) {
-            self.velocity.0 -= 0.1;
+            self.velocity.0 -= 0.5;
         }
     }
 
     fn update(&mut self, ground: &Ground, update_args: UpdateArgs) {
         let dt = update_args.dt * 10.0;
 
-        let p1 = [self.pos.0, self.pos.1 + self.size];
-        let p2 = [self.pos.0 + self.size, self.pos.1 + self.size];
+        let p1 = [self.pos[0], self.pos[1] + self.size];
+        let p2 = [self.pos[0] + self.size, self.pos[1] + self.size];
 
         for &p in &[p1, p2] {
             //check if we're above or below a line
@@ -51,28 +51,28 @@ impl Player {
             let b = x2 - x1;
             let c = y1 * (x2 - x1);
             let distance = (a * p[0] - b * p[1] + c) / f64::sqrt(a.powi(2) + b.powi(2));
-            println!("{}", distance);
 
-            if distance < 0.0 && self.velocity.0 < 0.0 {
+            if distance <= 0.0 && !self.grounded {
                 // trying to go beneath
-                self.velocity.0 = 0.0;
-            }
+                let sin = math::cross(ground.normals[0], [1.0, 0.0]);
+                let ydiff = distance / sin;
+                println!("old pos: {}", self.pos[1]);
+                self.pos[1] += ydiff;
+                println!("new pos: {}", self.pos[1]);
 
-            if distance < 1.0 && distance > -1.0 {
                 self.grounded = true;
                 self.velocity.1 = 0.0;
                 break;
-            } else {
-                self.grounded = false;
             }
+            self.grounded = false;
+            println!("{}", self.grounded);
         }
-
         if !self.grounded {
-            self.velocity.1 += 2.0 * dt;
+            self.velocity.1 += 10.0 * dt;
         }
 
-        self.pos.0 += self.velocity.0 * dt;
-        self.pos.1 += self.velocity.1 * dt;
+        self.pos[0] += self.velocity.0 * dt;
+        self.pos[1] += self.velocity.1 * dt;
     }
 
     fn draw(&self, window: &mut PistonWindow, event: &Event) {
@@ -80,25 +80,24 @@ impl Player {
             let red = [1.0, 0.0, 0.0, 1.0];
             let blue = [0.0, 0.0, 1.0, 1.0];
 
-            clear([1.0; 4], graphics);
             rectangle(
                 blue,
-                [self.pos.0, self.pos.1, self.size, self.size],
+                [self.pos[0], self.pos[1], self.size, self.size],
                 context.transform,
                 graphics,
             );
 
             ellipse(
                 red,
-                [self.pos.0 - 2.0, self.pos.1 + self.size - 2.0, 4.0, 4.0],
+                [self.pos[0] - 2.0, self.pos[1] + self.size - 2.0, 4.0, 4.0],
                 context.transform,
                 graphics,
             );
             ellipse(
                 red,
                 [
-                    self.pos.0 + self.size - 2.0,
-                    self.pos.1 + self.size - 2.0,
+                    self.pos[0] + self.size - 2.0,
+                    self.pos[1] + self.size - 2.0,
                     4.0,
                     4.0,
                 ],
@@ -145,7 +144,7 @@ fn main() {
         .build()
         .unwrap();
 
-    let mut player = Player::from_pos((20.0, 0.0), 100.0);
+    let mut player = Player::from_pos([20.0, 0.0], 100.0);
     let ground = Ground {
         vertices: vec![[0.0, 240.0], [200.0, 300.0], [400.0, 400.0], [0.0, 999.9]],
         normals: vec![
