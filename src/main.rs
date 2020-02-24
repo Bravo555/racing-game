@@ -30,15 +30,18 @@ impl Player {
             self.jump();
         }
         if let Some(ButtonState::Press) = input_state.get(&Key::Right) {
-            self.velocity.0 += 0.5;
+            self.velocity.0 += 0.1;
         }
         if let Some(ButtonState::Press) = input_state.get(&Key::Left) {
-            self.velocity.0 -= 0.5;
+            self.velocity.0 -= 0.1;
         }
     }
 
     fn update(&mut self, ground: &Ground, update_args: UpdateArgs) {
         let dt = update_args.dt * 10.0;
+
+        self.pos[0] += self.velocity.0 * dt;
+        self.pos[1] += self.velocity.1 * dt;
 
         let p1 = [self.pos[0], self.pos[1] + self.size];
         let p2 = [self.pos[0] + self.size, self.pos[1] + self.size];
@@ -56,23 +59,20 @@ impl Player {
                 // trying to go beneath
                 let sin = math::cross(ground.normals[0], [1.0, 0.0]);
                 let ydiff = distance / sin;
-                println!("old pos: {}", self.pos[1]);
                 self.pos[1] += ydiff;
-                println!("new pos: {}", self.pos[1]);
 
                 self.grounded = true;
                 self.velocity.1 = 0.0;
                 break;
-            }
+            } else {
             self.grounded = false;
+            }
             println!("{}", self.grounded);
         }
         if !self.grounded {
             self.velocity.1 += 10.0 * dt;
         }
 
-        self.pos[0] += self.velocity.0 * dt;
-        self.pos[1] += self.velocity.1 * dt;
     }
 
     fn draw(&self, window: &mut PistonWindow, event: &Event) {
