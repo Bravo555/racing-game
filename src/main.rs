@@ -3,8 +3,10 @@ use std::collections::HashMap;
 
 struct Player {
     pos: [f64; 2],
+    rotation: f64,
     size: f64,
-    velocity: (f64, f64),
+    velocity: [f64; 2],
+    ang_velocity: f64,
     grounded: bool,
 }
 
@@ -12,15 +14,17 @@ impl Player {
     fn from_pos(pos: [f64; 2], size: f64) -> Player {
         Player {
             pos,
+            rotation: 0.0,
             size,
-            velocity: (0.0, 0.0),
+            velocity: [0.0; 2],
+            ang_velocity: 0.0,
             grounded: false,
         }
     }
 
     fn jump(&mut self) {
         if self.grounded {
-            self.velocity.1 -= 50.0;
+            self.velocity[1] -= 50.0;
             self.grounded = false;
         }
     }
@@ -30,21 +34,29 @@ impl Player {
             self.jump();
         }
         if let Some(ButtonState::Press) = input_state.get(&Key::Right) {
-            self.velocity.0 += 0.1;
+            self.velocity[0] += 0.1;
         }
         if let Some(ButtonState::Press) = input_state.get(&Key::Left) {
-            self.velocity.0 -= 0.1;
+            self.velocity[0] -= 0.1;
         }
     }
 
     fn update(&mut self, ground: &Ground, update_args: UpdateArgs) {
-        let dt = update_args.dt * 10.0;
+        let dt = update_args.dt * 2.0;
 
-        self.pos[0] += self.velocity.0 * dt;
-        self.pos[1] += self.velocity.1 * dt;
+        self.pos[0] += self.velocity[0] * dt;
+        self.pos[1] += self.velocity[1] * dt;
+        self.rotation += self.ang_velocity * dt;
 
-        let p1 = [self.pos[0], self.pos[1] + self.size];
-        let p2 = [self.pos[0] + self.size, self.pos[1] + self.size];
+        let p1 = [-self.size / 2.0, self.size / 2.0];
+        let p2 = [self.size / 2.0, self.size / 2.0];
+
+        let p1 = math::transform_pos(math::rotate_radians(self.rotation), p1);
+        let p2 = math::transform_pos(math::rotate_radians(self.rotation), p2);
+
+        let p1 = math::transform_pos(math::translate(self.pos), p1);
+        let p2 = math::transform_pos(math::translate(self.pos), p2);
+        println!("p1: {:?} p2: {:?}", p1, p2);
 
         for &p in &[p1, p2] {
             //check if we're above or below a line
@@ -62,45 +74,50 @@ impl Player {
                 self.pos[1] += ydiff;
 
                 self.grounded = true;
-                self.velocity.1 = 0.0;
+                let ang_velocity = if p == p1 { 1.0 } else { -1.0 }
+                    * (vec_len(self.velocity) / (self.size * f64::sqrt(2.0)))
+                    * 0.1;
+                self.ang_velocity += ang_velocity;
+                self.velocity[1] = 0.0;
                 break;
             } else {
-            self.grounded = false;
+                self.grounded = false;
             }
-            println!("{}", self.grounded);
         }
         if !self.grounded {
-            self.velocity.1 += 10.0 * dt;
+            self.velocity[1] += 10.0 * dt;
         }
-
     }
 
     fn draw(&self, window: &mut PistonWindow, event: &Event) {
         window.draw_2d(event, |context, graphics, _device| {
             let red = [1.0, 0.0, 0.0, 1.0];
             let blue = [0.0, 0.0, 1.0, 1.0];
+            let green = [0.0, 1.0, 0.0, 1.0];
+            let x = self.pos[0];
+            let y = self.pos[1];
+            let size = self.size;
+
+            let transform = context
+                .transform
+                .trans(x, y)
+                .rot_rad(self.rotation)
+                .trans(-size / 2.0, -size / 2.0);
+
+            rectangle(blue, [0.0, 0.0, size, size], transform, graphics);
+
+            rectangle(red, [-2.0, size - 2.0, 4.0, 4.0], transform, graphics);
+            rectangle(red, [size - 2.0, size - 2.0, 4.0, 4.0], transform, graphics);
 
             rectangle(
-                blue,
-                [self.pos[0], self.pos[1], self.size, self.size],
+                green,
+                [x - size / 2.0, y + size / 2.0, 4.0, 4.0],
                 context.transform,
                 graphics,
             );
-
-            ellipse(
-                red,
-                [self.pos[0] - 2.0, self.pos[1] + self.size - 2.0, 4.0, 4.0],
-                context.transform,
-                graphics,
-            );
-            ellipse(
-                red,
-                [
-                    self.pos[0] + self.size - 2.0,
-                    self.pos[1] + self.size - 2.0,
-                    4.0,
-                    4.0,
-                ],
+            rectangle(
+                green,
+                [x + size / 2.0, y + size / 2.0, 4.0, 4.0],
                 context.transform,
                 graphics,
             );
@@ -144,7 +161,7 @@ fn main() {
         .build()
         .unwrap();
 
-    let mut player = Player::from_pos([20.0, 0.0], 100.0);
+    let mut player = Player::from_pos([80.0, 0.0], 100.0);
     let ground = Ground {
         vertices: vec![[0.0, 240.0], [200.0, 300.0], [400.0, 400.0], [0.0, 999.9]],
         normals: vec![
@@ -152,7 +169,6 @@ fn main() {
             create_normal([0.0, 240.0], [200.0, 300.0]),
         ],
     };
-    println!("{:?}", ground.normals);
 
     let mut input_state: HashMap<Key, ButtonState> = HashMap::new();
 
@@ -173,8 +189,8 @@ fn main() {
             clear([1.0; 4], graphics);
         });
 
-        player.draw(&mut window, &event);
         ground.draw(&mut window, &event);
+        player.draw(&mut window, &event);
     }
 }
 
@@ -195,4 +211,8 @@ fn distance(p1: [f64; 2], p2: [f64; 2]) -> f64 {
     let dx = p2[0] - p1[0];
     let dy = p2[1] - p1[1];
     f64::sqrt(dx.powi(2) + dy.powi(2))
+}
+
+fn vec_len(v: [f64; 2]) -> f64 {
+    f64::sqrt(v[0].powi(2) + v[1].powi(2))
 }
