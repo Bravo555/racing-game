@@ -29,6 +29,15 @@ impl Player {
         }
     }
 
+    fn corners(&self) -> [[f64; 2]; 4] {
+        [
+            [-self.size / 2.0, self.size / 2.0],
+            [self.size / 2.0, self.size / 2.0],
+            [-self.size / 2.0, -self.size / 2.0],
+            [self.size / 2.0, -self.size / 2.0],
+        ]
+    }
+
     fn handle_input(&mut self, input_state: &HashMap<Key, ButtonState>) {
         if let Some(ButtonState::Press) = input_state.get(&Key::Up) {
             self.jump();
@@ -42,23 +51,20 @@ impl Player {
     }
 
     fn update(&mut self, ground: &Ground, update_args: UpdateArgs) {
-        let dt = update_args.dt * 2.0;
+        let dt = update_args.dt * 5.0;
 
         self.pos[0] += self.velocity[0] * dt;
         self.pos[1] += self.velocity[1] * dt;
         self.rotation += self.ang_velocity * dt;
 
-        let p1 = [-self.size / 2.0, self.size / 2.0];
-        let p2 = [self.size / 2.0, self.size / 2.0];
+        let trans_matrix = math::multiply(
+            math::translate(self.pos),
+            math::rotate_radians(self.rotation),
+        );
 
-        let p1 = math::transform_pos(math::rotate_radians(self.rotation), p1);
-        let p2 = math::transform_pos(math::rotate_radians(self.rotation), p2);
+        for p in &self.corners() {
+            let p = math::transform_pos(trans_matrix, *p);
 
-        let p1 = math::transform_pos(math::translate(self.pos), p1);
-        let p2 = math::transform_pos(math::translate(self.pos), p2);
-        println!("p1: {:?} p2: {:?}", p1, p2);
-
-        for &p in &[p1, p2] {
             //check if we're above or below a line
             let ([x1, y1], [x2, y2]) = (ground.vertices[0], ground.vertices[1]);
 
@@ -74,7 +80,7 @@ impl Player {
                 self.pos[1] += ydiff;
 
                 self.grounded = true;
-                let ang_velocity = if p == p1 { 1.0 } else { -1.0 }
+                let ang_velocity = if p[0] < self.pos[0] { 1.0 } else { -1.0 }
                     * (vec_len(self.velocity) / (self.size * f64::sqrt(2.0)))
                     * 0.1;
                 self.ang_velocity += ang_velocity;
@@ -173,6 +179,7 @@ fn main() {
     let mut input_state: HashMap<Key, ButtonState> = HashMap::new();
 
     while let Some(event) = window.next() {
+        let start = std::time::Instant::now();
         if let Event::Input(Input::Button(button_args), _) = event {
             if let Button::Keyboard(key) = button_args.button {
                 input_state.insert(key, button_args.state);
@@ -191,6 +198,8 @@ fn main() {
 
         ground.draw(&mut window, &event);
         player.draw(&mut window, &event);
+
+        println!("frametime = {:?}", std::time::Instant::elapsed(&start));
     }
 }
 
